@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D پزل - اپنی تصویر سے پزل کھیلیں</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+            direction: rtl;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #1877f2;
+        }
+        
+        .upload-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+        }
+        
+        .puzzle-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            margin: 20px auto;
+            width: 300px;
+            height: 300px;
+            perspective: 1000px;
+        }
+        
+        .puzzle-piece {
+            width: 100%;
+            height: 100%;
+            background-size: 300px 300px;
+            cursor: pointer;
+            transition: transform 0.3s;
+            transform-style: preserve-3d;
+            border: 1px solid #ddd;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        
+        .puzzle-piece:hover {
+            transform: scale(1.05) rotateY(10deg);
+        }
+        
+        .game-info {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        
+        button {
+            background-color: #1877f2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        
+        button:hover {
+            background-color: #166fe5;
+        }
+        
+        .ad-container {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f0f2f5;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>3D پزل</h1>
+        <p>اپنی تصویر اپ لوڈ کریں اور پزل حل کریں!</p>
+        
+        <div class="upload-section">
+            <input type="file" id="image-upload" accept="image/*">
+            <button id="start-game">گیم شروع کریں</button>
+            <div>
+                <label for="puzzle-size">پزل سائز:</label>
+                <select id="puzzle-size">
+                    <option value="3">3x3 (آسان)</option>
+                    <option value="4">4x4 (درمیانہ)</option>
+                    <option value="5">5x5 (مشکل)</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="game-info">
+            <div>وقت: <span id="time">00:00</span></div>
+            <div>چالیں: <span id="moves">0</span></div>
+        </div>
+        
+        <div class="puzzle-container" id="puzzle-container"></div>
+        
+        <button id="shuffle" style="display:none;">دوبارہ ترتیب دیں</button>
+        <button id="solve" style="display:none;">حل دیکھیں</button>
+        
+        <div class="ad-container">
+            <p>مزید وقت چاہیے؟ ایک مختصر ویڈیو دیکھیں!</p>
+            <button id="watch-ad">ویڈیو دیکھیں</button>
+        </div>
+    </div>
+
+    <script>
+        // گیم ویری ایبلز
+        let puzzlePieces = [];
+        let emptyIndex = 0;
+        let timer;
+        let seconds = 0;
+        let moves = 0;
+        let puzzleSize = 3;
+        let gameStarted = false;
+        
+        // ایلیمنٹس
+        const imageUpload = document.getElementById('image-upload');
+        const startGameBtn = document.getElementById('start-game');
+        const puzzleContainer = document.getElementById('puzzle-container');
+        const timeDisplay = document.getElementById('time');
+        const movesDisplay = document.getElementById('moves');
+        const shuffleBtn = document.getElementById('shuffle');
+        const solveBtn = document.getElementById('solve');
+        const watchAdBtn = document.getElementById('watch-ad');
+        const sizeSelect = document.getElementById('puzzle-size');
+        
+        // ایونٹ لسنرز
+        startGameBtn.addEventListener('click', startGame);
+        shuffleBtn.addEventListener('click', shufflePuzzle);
+        solveBtn.addEventListener('click', solvePuzzle);
+        watchAdBtn.addEventListener('click', showAd);
+        sizeSelect.addEventListener('change', (e) => {
+            puzzleSize = parseInt(e.target.value);
+        });
+        
+        // گیم شروع کریں
+        function startGame() {
+            if (!imageUpload.files[0]) {
+                alert('براہ کرم ایک تصویر منتخب کریں');
+                return;
+            }
+            
+            const file = imageUpload.files[0];
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                createPuzzle(e.target.result);
+            };
+            
+            reader.readAsDataURL(file);
+        }
+        
+        // پزل بنائیں
+        function createPuzzle(imageSrc) {
+            gameStarted = true;
+            puzzleContainer.innerHTML = '';
+            puzzleContainer.style.width = `${puzzleSize * 100}px`;
+            puzzleContainer.style.height = `${puzzleSize * 100}px`;
+            puzzleContainer.style.gridTemplateColumns = `repeat(${puzzleSize}, 1fr)`;
+            
+            // پزل کے ٹکڑے بنائیں
+            puzzlePieces = [];
+            const pieceCount = puzzleSize * puzzleSize;
+            
+            for (let i = 0; i < pieceCount; i++) {
+                const piece = document.createElement('div');
+                piece.className = 'puzzle-piece';
+                piece.dataset.index = i;
+                
+                // تصویر کا پس منظر سیٹ کریں
+                const row = Math.floor(i / puzzleSize);
+                const col = i % puzzleSize;
+                
+                piece.style.backgroundImage = `url(${imageSrc})`;
+                piece.style.backgroundPosition = `-${col * 100}px -${row * 100}px`;
+                
+                if (i === pieceCount - 1) {
+                    piece.style.backgroundColor = '#f0f2f5';
+                    piece.style.backgroundImage = 'none';
+                    emptyIndex = i;
+                }
+                
+                piece.addEventListener('click', () => movePiece(i));
+                puzzleContainer.appendChild(piece);
+                puzzlePieces.push(piece);
+            }
+            
+            // گیم کنٹرولز دکھائیں
+            shuffleBtn.style.display = 'inline-block';
+            solveBtn.style.display = 'inline-block';
+            
+            // ٹائمر شروع کریں
+            seconds = 0;
+            moves = 0;
+            updateDisplay();
+            timer = setInterval(updateTimer, 1000);
+            
+            // پزل کو ترتیب دیں
+            shufflePuzzle();
+        }
+        
+        // پزل کو ترتیب دیں
+        function shufflePuzzle() {
+            if (!gameStarted) return;
+            
+            // رینڈم موومنٹس کے ذریعے پزل کو ترتیب دیں
+            for (let i = 0; i < 1000; i++) {
+                const adjacent = getAdjacentPieces(emptyIndex);
+                const randomIndex = adjacent[Math.floor(Math.random() * adjacent.length)];
+                swapPieces(randomIndex, emptyIndex);
+                emptyIndex = randomIndex;
+            }
+            
+            moves = 0;
+            updateDisplay();
+        }
+        
+        // پزل حل کریں
+        function solvePuzzle() {
+            if (!gameStarted) return;
+            
+            // تمام ٹکڑوں کو صحیح پوزیشن پر رکھیں
+            for (let i = 0; i < puzzlePieces.length; i++) {
+                puzzlePieces[i].style.transform = 'none';
+                puzzlePieces[i].style.opacity = '1';
+            }
+            
+            emptyIndex = puzzlePieces.length - 1;
+            clearInterval(timer);
+        }
+        
+        // ٹکڑا منتقل کریں
+        function movePiece(index) {
+            if (!gameStarted || index === emptyIndex) return;
+            
+            const adjacent = getAdjacentPieces(emptyIndex);
+            if (adjacent.includes(index)) {
+                swapPieces(index, emptyIndex);
+                emptyIndex = index;
+                moves++;
+                updateDisplay();
+                
+                if (isPuzzleSolved()) {
+                    clearInterval(timer);
+                    alert(`مبارک ہو! آپ نے پزل ${formatTime(seconds)} میں حل کر لیا اور ${moves} چالوں میں!`);
+                }
+            }
+        }
+        
+        // ٹکڑوں کو تبدیل کریں
+        function swapPieces(index1, index2) {
+            // پوزیشن تبدیل کریں
+            const temp = puzzlePieces[index1].style.transform;
+            puzzlePieces[index1].style.transform = puzzlePieces[index2].style.transform;
+            puzzlePieces[index2].style.transform = temp;
+            
+            // 3D اثر شامل کریں
+            puzzlePieces[index1].style.transform += ' rotateY(180deg)';
+            puzzlePieces[index2].style.transform += ' rotateY(180deg)';
+            
+            // مختصر وقت کے لیے ظاہر کریں
+            puzzlePieces[index1].style.opacity = '0.7';
+            puzzlePieces[index2].style.opacity = '0.7';
+            
+            setTimeout(() => {
+                puzzlePieces[index1].style.opacity = '1';
+                puzzlePieces[index2].style.opacity = '1';
+            }, 300);
+        }
+        
+        // ملحقہ ٹکڑے حاصل کریں
+        function getAdjacentPieces(index) {
+            const adjacent = [];
+            const row = Math.floor(index / puzzleSize);
+            const col = index % puzzleSize;
+            
+            // اوپر
+            if (row > 0) adjacent.push(index - puzzleSize);
+            // نیچے
+            if (row < puzzleSize - 1) adjacent.push(index + puzzleSize);
+            // بائیں
+            if (col > 0) adjacent.push(index - 1);
+            // دائیں
+            if (col < puzzleSize - 1) adjacent.push(index + 1);
+            
+            return adjacent;
+        }
+        
+        // پزل حل ہو گیا ہے؟
+        function isPuzzleSolved() {
+            for (let i = 0; i < puzzlePieces.length - 1; i++) {
+                if (puzzlePieces[i].dataset.index !== i.toString()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        
+        // ٹائمر اپ ڈیٹ کریں
+        function updateTimer() {
+            seconds++;
+            updateDisplay();
+        }
+        
+        // ڈسپلے اپ ڈیٹ کریں
+        function updateDisplay() {
+            timeDisplay.textContent = formatTime(seconds);
+            movesDisplay.textContent = moves;
+        }
+        
+        // وقت کو فارمیٹ کریں
+        function formatTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        // اشتہار دکھائیں
+        function showAd() {
+            alert('اشتہار دکھایا جا رہا ہے... (اصل ایپ میں یہاں آپ کو ادنیٹ کا کوڈ شامل کرنا ہوگا)');
+            // ویڈیو دیکھنے کے بعد 30 سیکنڈ کا اضافی وقت دیں
+            seconds -= 30;
+            if (seconds < 0) seconds = 0;
+            updateDisplay();
+        }
+    </script>
+</body>
+</html>
